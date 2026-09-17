@@ -1,0 +1,715 @@
+--[[
+    ================================================================
+    [ SCRIPT INFORMATION ]
+    Project: Custom Script
+    Author: OYB
+    YouTube: https://www.youtube.com/channel/UCAlXXV1Hbvf7WbfXARuVtiQ
+    
+    [ TERMS AND CONDITIONS ]
+    - You ARE allowed to use and modify this script for your own games.
+    - You ARE NOT allowed to re-upload, redistribute, or claim 
+      ownership of this script.
+    - Removing or altering these credits is strictly prohibited.
+    
+    Copyright (c) 2026 OYB. All rights reserved.
+    ================================================================
+]]
+
+-- ⚠️ IMPORTANT: Put this code at the VERY TOP of your Main Script (before obfuscating) ⚠️
+
+local ProtectionConfig = {
+    -- 🔴 CRITICAL: This MUST exactly match the 'Secret' value in your Key System's Config!
+    -- If your Key System has: Secret = "Test"
+    -- Then this must also be: SecretKey = "Test"
+    SecretKey = "960011kl",
+    
+    -- The name of your Hub (shown in the kick message if they try to bypass)
+    HubName = "ALL HUB"
+}
+
+-- Anti-Bypass Logic: Checks if the Key System successfully set the global variable
+if not _G[ProtectionConfig.SecretKey] then
+    local player = game:GetService("Players").LocalPlayer
+    if player then
+        player:Kick("\n🛡️ Unauthorized Execution 🛡️\n\nPlease use the official Key System to run " .. ProtectionConfig.HubName)
+    end
+    return -- Stops the rest of the script from loading!
+end
+
+-------------------------------------------------------------------------------
+-- 👇 YOUR MAIN SCRIPT CODE STARTS HERE 👇
+-------------------------------------------------------------------------------
+
+print(ProtectionConfig.HubName .. " Loaded Successfully!")
+
+
+
+--//====================================================
+--// AIM TESTER - PRIVATE ROBLOX STUDIO TEST
+--// Place this LocalScript in:
+--// StarterPlayer > StarterPlayerScripts
+--//====================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = workspace.CurrentCamera
+
+--====================================================
+-- SETTINGS
+--====================================================
+
+local Settings = {
+	Enabled = false,
+
+	AimKey = Enum.UserInputType.MouseButton2,
+
+	-- Actual radius of the aim circle in pixels
+	FOV = 120,
+
+	-- 0.01 = very fast
+	-- 1 = very slow
+	Smoothness = 0.20,
+
+	TargetLock = true,
+	SwitchTargets = true,
+	WallCheck = true,
+
+	UIKey = Enum.KeyCode.F4,
+}
+
+local aiming = false
+local currentTarget = nil
+
+--====================================================
+-- SCREEN GUI
+--====================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AimTester"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
+
+--====================================================
+-- FOV CIRCLE
+--====================================================
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "AimRadius"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.BorderSizePixel = 0
+FOVCircle.Size = UDim2.fromOffset(
+	Settings.FOV * 2,
+	Settings.FOV * 2
+)
+FOVCircle.Visible = false
+FOVCircle.Parent = ScreenGui
+
+local CircleCorner = Instance.new("UICorner")
+CircleCorner.CornerRadius = UDim.new(1, 0)
+CircleCorner.Parent = FOVCircle
+
+local CircleStroke = Instance.new("UIStroke")
+CircleStroke.Thickness = 2
+CircleStroke.Transparency = 0.1
+CircleStroke.Color = Color3.fromRGB(255, 255, 255)
+CircleStroke.Parent = FOVCircle
+
+--====================================================
+-- MAIN WINDOW
+--====================================================
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(330, 390)
+Main.Position = UDim2.new(0.5, -165, 0.5, -195)
+Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = Main
+
+--====================================================
+-- TITLE
+--====================================================
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -55, 0, 45)
+Title.Position = UDim2.fromOffset(15, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "AIM TESTER"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+
+--====================================================
+-- CLOSE BUTTON
+--====================================================
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.fromOffset(35, 35)
+Close.Position = UDim2.new(1, -42, 0, 5)
+Close.BackgroundTransparency = 1
+Close.Text = "×"
+Close.TextColor3 = Color3.fromRGB(220, 220, 220)
+Close.TextSize = 25
+Close.Font = Enum.Font.GothamBold
+Close.Parent = Main
+
+Close.MouseButton1Click:Connect(function()
+	Main.Visible = false
+end)
+
+--====================================================
+-- UI HELPERS
+--====================================================
+
+local function createToggle(name, y, default, callback)
+
+	local Label = Instance.new("TextLabel")
+	Label.Size = UDim2.fromOffset(190, 35)
+	Label.Position = UDim2.fromOffset(15, y)
+	Label.BackgroundTransparency = 1
+	Label.Text = name
+	Label.TextColor3 = Color3.fromRGB(230, 230, 230)
+	Label.TextSize = 14
+	Label.Font = Enum.Font.Gotham
+	Label.TextXAlignment = Enum.TextXAlignment.Left
+	Label.Parent = Main
+
+	local Button = Instance.new("TextButton")
+	Button.Size = UDim2.fromOffset(75, 30)
+	Button.Position = UDim2.new(1, -90, 0, y + 2)
+	Button.BackgroundColor3 =
+		default
+		and Color3.fromRGB(65, 150, 95)
+		or Color3.fromRGB(55, 55, 60)
+
+	Button.Text = default and "ON" or "OFF"
+	Button.TextColor3 = Color3.new(1, 1, 1)
+	Button.TextSize = 12
+	Button.Font = Enum.Font.GothamBold
+	Button.Parent = Main
+
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0, 6)
+	Corner.Parent = Button
+
+	local state = default
+
+	Button.MouseButton1Click:Connect(function()
+
+		state = not state
+
+		Button.Text = state and "ON" or "OFF"
+
+		Button.BackgroundColor3 =
+			state
+			and Color3.fromRGB(65, 150, 95)
+			or Color3.fromRGB(55, 55, 60)
+
+		callback(state)
+	end)
+end
+
+local function createValueBox(name, y, value, callback)
+
+	local Label = Instance.new("TextLabel")
+	Label.Size = UDim2.fromOffset(190, 35)
+	Label.Position = UDim2.fromOffset(15, y)
+	Label.BackgroundTransparency = 1
+	Label.Text = name
+	Label.TextColor3 = Color3.fromRGB(230, 230, 230)
+	Label.TextSize = 14
+	Label.Font = Enum.Font.Gotham
+	Label.TextXAlignment = Enum.TextXAlignment.Left
+	Label.Parent = Main
+
+	local Box = Instance.new("TextBox")
+	Box.Size = UDim2.fromOffset(75, 30)
+	Box.Position = UDim2.new(1, -90, 0, y + 2)
+	Box.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+	Box.Text = tostring(value)
+	Box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	Box.TextSize = 12
+	Box.Font = Enum.Font.Gotham
+	Box.ClearTextOnFocus = false
+	Box.Parent = Main
+
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0, 6)
+	Corner.Parent = Box
+
+	Box.FocusLost:Connect(function()
+
+		local number = tonumber(Box.Text)
+
+		if number then
+			callback(number)
+		else
+			Box.Text = tostring(value)
+		end
+	end)
+end
+
+--====================================================
+-- CONTROLS
+--====================================================
+
+createToggle("Aim Assist", 55, Settings.Enabled, function(state)
+
+	Settings.Enabled = state
+
+	if not state then
+		currentTarget = nil
+	end
+end)
+
+createValueBox("Aim Radius", 100, Settings.FOV, function(value)
+
+	Settings.FOV = math.clamp(value, 10, 1000)
+
+	FOVCircle.Size = UDim2.fromOffset(
+		Settings.FOV * 2,
+		Settings.FOV * 2
+	)
+end)
+
+createValueBox("Smoothness", 145, Settings.Smoothness, function(value)
+
+	Settings.Smoothness = math.clamp(value, 0.01, 1)
+end)
+
+createToggle("Target Lock", 190, Settings.TargetLock, function(state)
+
+	Settings.TargetLock = state
+
+	if not state then
+		currentTarget = nil
+	end
+end)
+
+createToggle("Switch Targets", 235, Settings.SwitchTargets, function(state)
+
+	Settings.SwitchTargets = state
+end)
+
+createToggle("Wall Check", 280, Settings.WallCheck, function(state)
+
+	Settings.WallCheck = state
+end)
+
+--====================================================
+-- AIM KEY DISPLAY
+--====================================================
+
+local AimKeyLabel = Instance.new("TextLabel")
+AimKeyLabel.Size = UDim2.fromOffset(190, 35)
+AimKeyLabel.Position = UDim2.fromOffset(15, 325)
+AimKeyLabel.BackgroundTransparency = 1
+AimKeyLabel.Text = "Aim Key"
+AimKeyLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
+AimKeyLabel.TextSize = 14
+AimKeyLabel.Font = Enum.Font.Gotham
+AimKeyLabel.TextXAlignment = Enum.TextXAlignment.Left
+AimKeyLabel.Parent = Main
+
+local AimKeyButton = Instance.new("TextButton")
+AimKeyButton.Size = UDim2.fromOffset(75, 30)
+AimKeyButton.Position = UDim2.new(1, -90, 0, 327)
+AimKeyButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+AimKeyButton.Text = "RMB"
+AimKeyButton.TextColor3 = Color3.new(1, 1, 1)
+AimKeyButton.TextSize = 12
+AimKeyButton.Font = Enum.Font.Gotham
+AimKeyButton.Parent = Main
+
+local KeyCorner = Instance.new("UICorner")
+KeyCorner.CornerRadius = UDim.new(0, 6)
+KeyCorner.Parent = AimKeyButton
+
+--====================================================
+-- DRAGGING
+--====================================================
+
+local dragging = false
+local dragStart
+local startPosition
+
+Title.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = true
+	dragStart = input.Position
+	 startPosition = Main.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+		local delta = input.Position - dragStart
+
+		Main.Position = UDim2.new(
+			startPosition.X.Scale,
+			startPosition.X.Offset + delta.X,
+			startPosition.Y.Scale,
+			startPosition.Y.Offset + delta.Y
+		)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+--====================================================
+-- CHARACTER
+--====================================================
+
+local function getCharacter(player)
+
+	if not player or player == LocalPlayer then
+		return nil
+	end
+
+	local character = player.Character
+
+	if not character then
+		return nil
+	end
+
+	local humanoid =
+		character:FindFirstChildOfClass("Humanoid")
+
+	local root =
+		character:FindFirstChild("HumanoidRootPart")
+
+	local head =
+		character:FindFirstChild("Head")
+
+	if not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
+
+	if not root or not head then
+		return nil
+	end
+
+	return character, root, head
+end
+
+--====================================================
+-- WALL CHECK
+--====================================================
+
+local function isVisible(character, position)
+
+	if not Settings.WallCheck then
+		return true
+	end
+
+	local origin = Camera.CFrame.Position
+	local direction = position - origin
+
+	local params = RaycastParams.new()
+
+	params.FilterType = Enum.RaycastFilterType.Exclude
+
+	params.FilterDescendantsInstances = {
+		LocalPlayer.Character
+	}
+
+	local result = workspace:Raycast(
+		origin,
+		direction,
+		params
+	)
+
+	if not result then
+		return true
+	end
+
+	return result.Instance:IsDescendantOf(character)
+end
+
+--====================================================
+-- TARGET FINDING
+--====================================================
+
+local function getTarget()
+
+	local mousePosition =
+		UserInputService:GetMouseLocation()
+
+	local closestPlayer = nil
+	local closestDistance = Settings.FOV
+
+	for _, player in ipairs(Players:GetPlayers()) do
+
+		local character, root, head =
+			getCharacter(player)
+
+		if character then
+
+			local screenPosition, onScreen =
+				Camera:WorldToScreenPoint(
+					head.Position
+				)
+
+			if onScreen then
+
+				local targetPosition =
+					Vector2.new(
+						screenPosition.X,
+						screenPosition.Y
+					)
+
+				local distance =
+					(targetPosition - mousePosition).Magnitude
+
+				--========================================
+				-- ACTUAL AIM CIRCLE CHECK
+				--========================================
+
+				if distance <= Settings.FOV then
+
+					if isVisible(
+						character,
+						head.Position
+					) then
+
+						if distance < closestDistance then
+
+							closestDistance = distance
+							closestPlayer = player
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return closestPlayer
+end
+
+--====================================================
+-- AIM
+--====================================================
+
+local function aimAt(player)
+
+	local character, root, head =
+		getCharacter(player)
+
+	if not character then
+		return
+	end
+
+	if Settings.WallCheck then
+		if not isVisible(
+			character,
+			head.Position
+		) then
+			return
+		end
+	end
+
+	local cameraPosition =
+		Camera.CFrame.Position
+
+	local desiredCFrame =
+		CFrame.lookAt(
+			cameraPosition,
+			head.Position
+		)
+
+	Camera.CFrame =
+		Camera.CFrame:Lerp(
+			desiredCFrame,
+			Settings.Smoothness
+		)
+end
+
+--====================================================
+-- INPUT
+--====================================================
+
+UserInputService.InputBegan:Connect(function(
+	input,
+	processed
+)
+
+	if processed then
+		return
+	end
+
+	-- Open / close UI
+	if input.KeyCode == Settings.UIKey then
+
+		Main.Visible = not Main.Visible
+
+		return
+	end
+
+	-- Aim key
+	if input.UserInputType == Settings.AimKey then
+
+		aiming = true
+
+		if Settings.Enabled then
+
+			if not currentTarget then
+				currentTarget = getTarget()
+			end
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Settings.AimKey then
+
+		aiming = false
+
+		if not Settings.TargetLock then
+			currentTarget = nil
+		end
+	end
+end)
+
+--====================================================
+-- MAIN LOOP
+--====================================================
+
+local targetCheckTimer = 0
+
+RunService.RenderStepped:Connect(function(deltaTime)
+
+	--===============================================
+	-- FOV CIRCLE
+	--===============================================
+
+	local mousePosition =
+		UserInputService:GetMouseLocation()
+
+	FOVCircle.Position =
+		UDim2.fromOffset(
+			mousePosition.X,
+			mousePosition.Y
+		)
+
+	FOVCircle.Size =
+		UDim2.fromOffset(
+			Settings.FOV * 2,
+			Settings.FOV * 2
+		)
+
+	FOVCircle.Visible =
+		Settings.Enabled
+
+	--===============================================
+	-- AIM SYSTEM
+	--===============================================
+
+	if not Settings.Enabled then
+
+		currentTarget = nil
+
+		return
+	end
+
+	if not aiming then
+		return
+	end
+
+	targetCheckTimer += deltaTime
+
+	-- Re-check target every 0.1 seconds
+	if targetCheckTimer >= 0.1 then
+
+		targetCheckTimer = 0
+
+		local validTarget = false
+
+		if currentTarget then
+
+			local character, root, head =
+				getCharacter(currentTarget)
+
+			if character then
+
+				local screenPosition, onScreen =
+					Camera:WorldToScreenPoint(
+						head.Position
+					)
+
+				if onScreen then
+
+					local targetPosition =
+						Vector2.new(
+							screenPosition.X,
+							screenPosition.Y
+						)
+
+					local mousePos =
+						UserInputService:GetMouseLocation()
+
+					local distance =
+						(targetPosition - mousePos).Magnitude
+
+					-- Target must remain inside
+					-- the actual aim radius
+					if distance <= Settings.FOV then
+
+						if isVisible(
+							character,
+							head.Position
+						) then
+
+							validTarget = true
+						end
+					end
+				end
+			end
+		end
+
+		--===========================================
+		-- TARGET SWITCHING
+		--===========================================
+
+		if not validTarget then
+
+			if Settings.SwitchTargets or not currentTarget then
+
+				currentTarget = getTarget()
+
+			else
+
+				currentTarget = nil
+			end
+		end
+	end
+
+	--===============================================
+	-- AIM AT CURRENT TARGET
+	--===============================================
+
+	if currentTarget then
+		aimAt(currentTarget)
+	end
+end)
